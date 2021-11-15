@@ -217,5 +217,189 @@ Vérifier le bon chargement de la liste à l'exécution, les différents databin
   - ils possèdent une méthode `RaisePropertyChanged()`
 - Extraire ce code dans une classe `ViewModelBase` en utilisant l'héritage
 
+## Prototype d'une UI avec WPF
+
+- Rappel : WPF = UI pour Windows seulement, mais on n'est pas limité à W10
+- Très similaire à WinUI (XAML + _code-behind_ + MVVM et databinding)
+- On va reprendre le projet de gestion d'employés, en réutilisant complètement les bibliothèques communes déjà écrites (`Common`, `DataAccess`, `ViewModels`), et en reprenant le code XAML WinUI qui sera très similaire
+- L'une des différences principales est que l'on a accès à un designer visuel sous VS qui reflète immédiatement les changements du code XAML, et également de travailler en mode _glisser-déposer_ si on le souhaite
+- D'autres concepts XAML et MVVM seront intégrés :
+  - le _converter_, qui permet de transformer une donnée brute provenant du Model en donnée exploitable pour l'affichage dans la View (exemple : une température stockée en celsius et affichée en fahrenheit)
+  - les _commands_ MVVM qui permettent de binder l'action d'un élément à une méthode
+  - ces concepts s'appliquent également aux interfaces WinUI, MAUI...
+
+### Mise en place
+
+- WPF est intégré depuis longtemps aux projets Desktop de VS, donc tout est déjà en place, on va ajouter un projet spécifique WPF à notre solution
+
+### Création du projet d'interface WPF
+
+- Dans notre solution, ajouter un projet _WPF Application_ (pour .NET Core)
+  - nom : `GestionEmploye.WPF`
+  - Target .NET 5
+- Un seul projet et créé (contrairement à WiUI)
+  - la structure est très similaire à celle du projet `WinUI`
+- Faire du projet WPF le projet de démarrage
+- Ajouter un simple `TextBlock` dans la `MainWindow` pour avoir quelquechose à visualiser
+- Lancer l'application-test pour vérifier que tout est bien en place
+
+### Reprise de l'interface existante
+
+- Copier l'intégralité de l'élément `Grid` principal de la `MainWindow` du projet WinUI
+- Le coller comme élément principal de la `MainWindow` WPF
+- Il faut modifier quelques petites choses :
+  - WPF ne supporte pas le binding à un événement : les clics sur les boutons ne réagiront pas, les supprimer (on utilisera des _Commands_ à la place)
+  - utiliser `Binding` à la place de `x:Bind` ; de plus `Binding` ira directement chercher dans la source, on peut enlever la mention `ViewModel` du chemin
+  - les propriétés `Header` des éléments n'existent pas en WPF : à la place, ajouter des lignes à la Grid pour accueillir des `TextBlock` qui feront office de headers pour nos `TextBox`
+- Tester la bonne mise en place de l'interface (mais les databindings ne fonctionnent plus ; noter cependant que cela ne provoque pas d'erreurs d'exécution)
+
+### Databindings en WPF
+
+- On a supprimé, dans le XAML, les mentions à notre variable `ViewModel` qui était initialisée dans le _code-behind_
+- C'est parce que `{Binding}` et `{x:Bind}` ne fonctionnent pas de la même manière
+- Voici les différences :
+
+| `{Binding}`                      | `{x:Bind}`                      |
+| -------------------------------- | ------------------------------- |
+| `"{Binding Employes}"`           | `"{x:Bind ViewModel.Employes}"` |
+| WPF ? Oui                        | WPF ? Non                       |
+| WinUI ? Oui                      | WinUI ? Oui                     |
+| résolution à l'exécution         | résolution à la compilation     |
+| source = propriété `DataContext` | source = objet associé au XAML  |
+
+- En WPF donc, on n'a pas le choix pour le databinding
+- La résolution à la compilation montrera les erreurs potentielles immédiatement (et sera également un poil plus rapide)
+- En WinUI on avait défini et initialisé la propriété `ViewModel` que l'on utilisait ensuite dans le XAML pour le binding ; avec WPF il faut à la place initialiser la propriété prédéfinie `DataContext`
+- Dans le constructeur du _code-behind_, instancier un `MainViewModel` dans une variable d'instance privée appelée `viewModel`, puis l'affecter à la propriété prédéfinie `DataContext`
+- => Les bindings iront alors automatiquement se « brancher » sur le VM instancié
+  - par exemple, `{Binding Employes}` va chercher une propriété `Employes` sur le DataContext, et va la trouver car le ViewModel possède bien une telle propriété
+  - rappel : en WPF, si un binding échoue, aucune erreur n'est générée, ni à la compilation, ni à l'exécution ; il est en revanche possible de constater les problèmes (_Debug/Windows/XAML Binding Failures_)
+
+### Chargement des données
+
+- Avant de s'occuper des _Commands_ pour binder des méthodes à des actions, on va faire en sorte que les données se chargent au lancement de la fenêtre
+- Dans le _code-behind_, remettre en place le mécanisme d'abonnement à l'événement d'activation de la fenêtre afin de charger les données fictives au lancement
+
+### Test
+
+- Lancer l'application pour vérifier le chargement des données et les databindings
+- Tout devrait presque fonctionner :
+  - les boutons ne sont pas encore « branchés »
+  - le binding des dates ne fonctionnent pas
+
+### Fixer le databinding sur le DatePicker
+
+- Pendant que l'application tourne, ouvrez la fenêtre `XAML Binding Failures` et constater les problèmes
+- On va d'abord s'occuper du problème de conversion sur le `DatePicker` : il s'attend à avoir un `DateTime` et il a un `DateTimeOffset`
+- Ajouter une propriété similaire à `DateEmbauche` sur le VM mais faites en sorte qu'elle soit de type `DateTime`
+- Tester, le datepicker doit maintenant fonctionner correctement
+- Il reste un problème de binding au niveau de la visibilité du panel « détails »
+
+### Fixer le databinding sur la visibilité de la partie « détails » - le _Converter_
+
+- l'erreur nous indique qu'on ne peut pas convertir un booléen en une valeur du type `System.Windows.Visibility`
+- Notre propriété `UnEmployeEstSelectionne` (censée contrôler la visibilité du panel) est bien un booléen
+- Mais WPF s'attend à avoir le type spécifique `System.Windows.Visibility` pour la propriété `Visibility` de l'élément
+- On pourrait utiliser la même approche que précédemment, en ajoutant une propriété du bon type et en faisant la conversion soi-même dans le getter, mais on va utiliser un mécanisme intégré à WPF : le **_Converter_**
+- WPF possède un _Converter_ prédéfini qui permet de convertir un booléen en type `Visibility`
+- Il faut déclarer qu'on va l'utiliser en ajoutant une ressource dans `App.xaml` :
+
+```xml
+<Application.Resources>
+  <BooleanToVisibilityConverter x:Key="MyBooleanToVisibilityConverter" />
+</Application.Resources>
+```
+
+- Une ressource est associée à une clé (un nom qui désignera la ressource dans notre code) par l'intermédiaire de l'extension markup `x:Key`
+- On peut alors utiliser cette ressource dans notre UI principale en utilisant l'extension markup `StaticResource` :
+
+```xml
+{Binding UnEmployeEstSelectionne, Mode=OneWay,
+  Converter={StaticResource MyBooleanToVisibilityConverter}}
+```
+
+- NB1 : on peut aussi créer des _converters_ nous-mêmes, pour gérer des scénarios moins classiques (on crée une classe qui implémente l'interface `IValueConverter`)
+- NB2 : en WinUI avec `x:Bind`, ça fonctionne directement car la conversion est automatique ; mais WinUI peut aussi utiliser les _converters_ (prédéfinis ou pas)
+- Tester (le panneau « détails » doit maintenant être caché au lancement) ; vérifier que plus aucune erreur de binding n'est reportée
+
+### Gestion des clics
+
+- En WinUI, on liait l'événement `Click` d'un bouton en XAML à une méthode dans le VM
+- En WPF, ce type de binding n'est pas supporté
+- Deux solutions :
+  - créer un _handler_ pour l'événement `Click` dans le _code-behind_ (méthode « à l'ancienne », utilisée dans WinForms) : pas très en phase avec le pattern MVVM qui vise à avoir le moins de code possible dans le _code-behind_...
+  - utiliser la propriété `Command` du bouton : c'est ce qu'on va faire ici
+
+### MVVM et _Commands_
+
+- Les _commands_ vont nous permettre de réaliser le binding entre une action sur un élément graphique et une méthode associée sur le VM
+- Processus :
+  1. Créer une classe qui implémente l'interface `ICommand`
+  2. Créer et paramétrer une propriété de ce type dans le VM
+  3. Utiliser cette propriété pour le binding en XAML
+
+#### L'interface `ICommand`
+
+- Voici un exemple de classe standard qui implémente l'interface `ICommand` :
+
+```c#
+public class DelegateCommand : ICommand
+{
+  private readonly Action _execute;
+  private readonly Func<bool> _canExecute;
+
+  public DelegateCommand(Action execute, Func<bool> canExecute = null)
+  {
+    _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+    _canExecute = canExecute;
+  }
+
+  public event EventHandler CanExecuteChanged;
+
+  public void RaiseCanExecuteChanged()
+  {
+    CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+  }
+
+  public bool CanExecute(object parameter)
+  {
+    return _canExecute == null
+      ? true
+      : _canExecute();
+  }
+
+  public void Execute(object parameter)
+  {
+    _execute();
+  }
+}
+```
+
+- Ajouter cette classe dans le projet `ViewModels`, dans un répertoire `Command`
+- Les détails de fonctionnement de cette classe « plomberie » ne nous intéressent pas ici, on va juste l'utiliser (il y a plusieurs façons de l'implémenter, des versions sont notamment disponibles dans des bibliothèques open source spécialisées MVVM)
+- On va pouvoir créer des objets de ce type dans nos VMs, pour créer des _commands_ relativement facilement
+
+#### Bouton « Rafraîchir » - action seulement
+
+- Commençons par le chargement des données qui doit être effectué à chaque appui sur le bouton « rafraîchir »
+- Dans le constructeur du VM,instancier un objet `DelegateCommand` appelé `ChargerCmd` qui permettra le binding entre un élément de l'UI et la méthode `Charger` (il faudra passer la méthode `Charger` en paramètre du constructeur)
+- Côté XAML, on peut maintenant lier la propriété `Command` du bouton à notre _command_ du ViewModel
+- Tester
+
+#### Bouton « Sauvegarder » - action + activation/désactivation
+
+- Réaliser le même type de traitement pour lier le bouton `Sauvegarder` à la méthode `Sauvegarder` de `EmployeViewModel` avec une commande appelée `SauvegarderCmd`
+  - on pourra passer la méthode `PeutSauvegarder` en deuxième paramètre du constructeur de `DelegateCommand` (utiliser une _lambda expression_)
+  - appeler `SauvegarderCmd.RaiseCanExecuteChanged()` quand une propriété change et qu'elle pourrait modifier l'état de `PeutSauvegarder`
+  - on n'aura alors plus besoin de binder la propriété `IsEnabled` du bouton
+
+### WPF - Conclusion
+
+- Nombreuses similarité avec WinUI, quelques différences cependant qui ne permettent pas de partager complètement le code XAML de l'interface
+- Les VMs, en revanche, peuvent être adaptés pour être utilisés par les deux technologies avec le pattern MVVM
+- `Binding` uniquement, avec `DataContext`, `x:Bind` non supporté
+- Les échecs de bindings n'empêchent pas l'application de tourner, mais ces erreurs sont reportées dans l'IDE à l'exécution
+- Les _converters_ permettent d'adapter une propriété du VM à un type de donnée attendu par XAML ; on peut utiliser les _converters_ prédéfinis et en définir nous-mêmes
+- Pour les actions, les _commands_ demandent plus de « plomberie » que les bindings directs mais sont également plus flexibles et puissantes (gestion activation/désactivation) ; on peut utiliser les _commands_ dans WinUI également
 
 
