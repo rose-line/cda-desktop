@@ -402,4 +402,148 @@ public class DelegateCommand : ICommand
 - Les _converters_ permettent d'adapter une propriété du VM à un type de donnée attendu par XAML ; on peut utiliser les _converters_ prédéfinis et en définir nous-mêmes
 - Pour les actions, les _commands_ demandent plus de « plomberie » que les bindings directs mais sont également plus flexibles et puissantes (gestion activation/désactivation) ; on peut utiliser les _commands_ dans WinUI également
 
+## Prototype d'une UI avec Windows Forms
+
+- WinForms (2002, intégré à .NET Core en 2016) n'utilise pas XAML
+- L'interface graphique est générée directement par du code C# qui instancie les éléments, les placent au bon endroit, lie les événements, etc.
+- Mais en général on ne code pas soi-même ce code UI, on utilise le _Windows Forms Designer_ qui permet de construire une UI par « glisser-déposer »
+- WinForms permet également une gestion du databinding, mais pas de la même forme et moins puissante qu'en XAML/MVVM ; on pourra néanmoins réutiliser nos VMs existants
+
+### Mise en place
+
+- Comme pour WPF, WinForms est intégré directement à VS, on va ajouter un projet spécifique WinForms à notre solution
+
+### Création du projet d'interface WinForms
+
+- Dans notre solution, ajouter un projet _Windows Forms App_ (attention, pas _.NET Framework_)
+  - nom : `GestionEmploye.WinForms`
+  - Target .NET 5
+- Un seul projet et créé
+- Renommer (F2) `Form1.cs` en `MainForm.cs`
+- La structure est différente de ce qu'on a vu :
+  - plus de XAML
+  - `Program.cs` : démarrage du programme, se charge notamment d'instancier la fenêtre de démarrage et de la lancer
+  - `MainForm.cs` : au double-clic, lance automatiquement le _Windows Forms Desgner_ sur cette fenêtre principale
+  - pour voir le code-behind (classe _partial_, en plusieurs fichiers), clic-droit, _View code_  : c'est ce fichier que l'on va modifier pour la partie logique
+  - raccourcis `F7` et `Shift-F7` pour passer du designer au _code-behind_
+  - `MainForm.Designer.cs` : autre partie (_partial_) de notre _form_, celle qui contient le code généré par le designer (en général on ne **touche pas** à ce fichier, sauf pour corriger des erreurs éventuelles dues à une manipulation du code que ne contrôle pas le générateur)
+- Faire du projet WinForms le projet de démarrage
+- Lancer l'application-test pour vérifier que la fenêtre (vide) s'affiche correctement
+
+### Découverte du _Windows Forms Designer_
+
+- Ouvrir la _Toolbox_ si elle n'est pas disponible (_View/Toolbox_)
+  - elle contient tous les _controls_ disponibles pour WinForms, par exemple les _containers_ qui permettent de contenir d'autres éléments
+  - noter qu'ils sont différents de ceux que vous connaissez en XAML (comme le `StackPanel` ou la `Grid`)
+  - c'est pourquoi il est plus compliqué d'obtenir une interface qui s'adapte facilement en WinForms : il faut bouger tous les éléments sur le designer dès que l'on change la disposition (en XAML, les _controls_ s'adaptent automatiquement aux modifications de code)
+- Glisser-déposer un bouton dans la fenêtre
+- Le déplacer dans la fenêtre ; noter comment, près des bords, l'élément vient se placer automatiquement par rapport aux marges qui sont définies dessus
+- Pour contrôler ces marges ainsi que d'autres propriétés du _control_, ouvrir le panneau _Properties_
+- Explorer un peu les propriétés de l'élément sélectionné et les boutons du panneau
+  - on peut classer les propriétés par catégories ou par ordre alphabétique
+  - on peut aussi voir les événements qui peuvent être associés à l'élément
+- Changer le titre de la fenêtre
+
+### Événements
+
+- L'interaction en WinForms fonctionne donc principalement sur la base d'événements auxquels vont réagir directement des méthodes dans le _code-behind_
+- Reprenons notre bouton et disons que l'on veut en faire notre bouton « Sauvegarder » ; on va le plus souvent utiliser le processus suivant :
+  - le renommer : on utilise en général le pattern de nommage `abbreviationControl_Description` ; ici, ça donnera `btn_Sauvegarder`
+  - le nommage est important :
+    - on pourra se référer à ce bouton dans le _code-behind_
+    - le nom des méthodes d'événements associés générées contiendront le nom de l'élément
+  - changer son texte (_Sauvegarder_)
+  - trouver son événement _Click_, doucle-cliquer dessus : cela va créer l'abonnement à l'événement et la méthode `btnSauvegarder_Click` dans le _code-behind_ (pattern de nommage automatique : `nomControl_Evenement`)
+  - dans la méthode générée, accéder programmatiquement aux propriétés du bouton pour modifier son texte, comme dans la démo WinUI
+  - tester si le clic fonctionne alors comme prévu
+- Examiner le code généré dans `MainForm.Designer.cs` pour avoir une idée de ce qui est construit lorsque l'on ajoute et configure des _controls_ et que l'on branche des événements
+
+### Construction de l'interface
+
+- Construire l'interface de l'application « Gestion des employés »
+  - travailler avec le designer, le panneau « toolbox » et le panneau « propriétés »
+  - utiliser des _panels_ comme container pour regrouper des _controls_
+  - suggestion : utiliser trois panels pour les trois parties principales de l'interface
+  - ne pas oublier de renommer systématiquement tous les _controls_ utilisés
+- Pour maintenir le layout lors du redimensionnement de la fenêtre, utiliser les propriétés `Dock` et `Anchor` des éléments
+  - `Dock` permet de « docker » (« magnétiser ») un élément sur un bord du container englobant ou de lui faire prendre tout l'espace disponible
+    - ex. : les différents panneaux de VS (_Solution Explorer_, _Toolbox_...) sont en général dockés sur le côté gauche ou droit ; le panneau d'erreurs est souvent docké en bas ; l'éditeur de code est docké en `Fill` (« remplir »), pour prendre toute la place restante
+  - `Anchor` permet « d'accrocher » l'élément par rapport à son conteneur
+    - ex. : un groupe de boutons « Annuler/OK » est souvent ancré en bas à droite => si la fenêtre conteneur change de taille, les boutons restent en bas à droite
+    - si on ancre à gauche et à droite, par exemple, le _control_ va se redimensionner pour toujours rester à même distance des bords gauche et droit de son conteneur
+- On peut utiliser le `Document Outline` pour sélectionner facilement des _controls_ sans avoir à cliquer dessus sur le designer (parfois compliqué et frustrant lorsque l'interface commence à être chargée)
+
+### Databinding avec WinForms
+
+- La _form_ aura un objet de type `BindingSource`
+  - il encapsule la source de données (que l'on va fournir) dans une propriété de type `DataSource`
+  - la propriété `Current` permet de savoir quel objet de la data source est actuellement sélectionné
+- On va instancier un `MainViewModel` (notre classe existante) et affecter au `DataSource` la propriété `Employes` de ce VM
+  - cette propriété `Employes` est de type `ObservableCollection<EmployeViewModel>`
+  - => la source de données pour la _form_ sera donc la liste des VM des employés chargés dans le VM
+- On va ensuite affecter à la propriété `DataSource` de la _ListBox_ le _BindingSource_ ainsi construit
+- La _ListBox_ sera connectée au _BindingSource_ lui-même connecté aux employés du `MainViewModel`
+- Comme c'est une collection observable, toute modification dans cette collection sera automatiquement connue du _BindingSource_, qui mettra automatiquement à jour la _ListBox_
+- On pourra ensuite binder les propriétés des _controls_ à des propriétés du VM employé courant du _BindingSource_ (`Current.Prenom`...) ; c'est ce qu'on va faire dans la partie « Détails »
+- Pour l'activation/désactivation des boutons, on binde la propriété `Enabled` à une méthode `PeutXXX`
+- Tout devra se faire en grande partie en C# :
+  - par exemple : `txtPrenom.DataBindings.Add("Text", bindingSource, "Prenom");` binde la propriété `Text` de la _TextBox_ `txtPrenom` à la propriété `Prenom` de l'élément courant de `bindingSource`
+  - on pourra cependant pour instancier la source utiliser de nouveau la _toolbox_ qui possède un composant `BindingSource` que l'on peut déposer sur la fenêtre et configurer sur le panneau `Properties`
+- Tout cela représente un peu les prémisses du pattern MVVM qui sera formalisé et généralisé plus tard avec XAML
+
+### Implémentation du databinding
+
+#### Chargement des données
+
+- S'arranger pour l'avoir à l'activation de la fenêtre
+
+#### Création du `BindingSource`
+
+- Glisser un `BindingSource` dans la fenêtre ; le nommer
+- Dans le _code-behind_, configurer sa `DataSource`
+
+#### Connexion à la _ListBox_
+
+- On va maintenant connecter la _ListBox_ au _BindingSource_
+  - cela peut se faire programmatiquement
+  - ou en utilisant les propriétés de la _ListBox_, qui a directement accès au _BindingSource_ de la fenêtre
+  - il s'agit en tout cas de configurer correctement son `DataSource` et son `DisplayMember` (la propriété qui va être affichée dans la liste, en l'occurrence le nom de l'employé)
+
+#### Binding de la partie « détails »
+
+- Brancher les bindings sur la partie « détails », sauf la _ComboxBox_ (voir ci-dessous)
+- En testant, on doit vérifier que :
+  - les détails sont bien synchronisés à l'employé sélectionné
+  - si on change le nom, le nom dans la liste change aussi (il faudra utiliser une surcharge spéciale de `DataBindings.Add` pour que cela soit immédiat)
+  - le bouton _Sauvegarder_ se désactive quand la validation n'est pas OK
+
+#### Cas particulier : la _ComboBox_
+
+- La configuration d'une _ComboBox_ en WinForms ressemble à celle de WPF/WinUI, mais les noms des propriétés sont différents
+- Poser sa `DataSource` à la liste des rôles dans le `MainViewModel` (équivalent `ItemsSource` dans WPF/WinUI)
+- Poser son `DisplayMember` à `"Nom"` (le nom du rôle, c'est ce qu'on doit afficher dans la box, équivalent `DisplayMemberPath`)
+- Maintenant la _ComboBox_ permettra de sélectionner parmi les différents rôles
+- Ensuite il faut binder sa valeur au rôle effectif de l'employé sélectionné
+  - `ValueMember` : la propriété qui identifie la sélection de manière unique sur le rôle (équivalent `SelectedValuePath`)
+  - `SelectedValue` : binding (donc avec `DataBindings`) sur la propriété de l'objet `Employe` sélectionné qui correspond à cette valeur (équivalent `SelectedValue`)
+- Maintenant la _ComboBox_ a une liste de rôles, et sa sélection est bindée à l'employé sélectionné par l'intermédiaire de la propriété `Id` du rôle
+- NB : pour forcer la _ComboBox_ à ne sélectionner que les éléments prédéfinis de la liste de rôle, changer sa propriété `DropDownStyle` (actuellement on peut taper ce qu'on veut)
+
+### Bouton « Rafraîchir »
+
+- Ajouter la gestion du clic sur le bouton « Rafraîchir »
+  - il faut charger les données
+  - et réinitialiser les bindings sur le _BindingSource_ avec la méthode `ResetBindings`
+
+### Bouton « Sauvegarder »
+
+- Ajouter la gestion de la prétendue sauvegarde
+  - il faudra explicitement convertir la propriété `Current` du _BindingSource_ en un `EmployeViewModel` pour pouvoir appeler sa méthode `Sauvegarder`
+
+### WinForms - Conclusion
+
+- Le _Windows Forms Designer_ permet de créer des interfaces graphiques facilement sans connaître de langage particulier comme XAML
+- Inconvénient majeur : parfois, la modification d'une petite partie de l'interface entraîne le remaniement manuel de nombreux _controls_
+- Le databinding, bien qu'existant, est moins évolué et demande plus de code qu'en WPF ou WinUI
+- Cela reste cependant une solution privilégiée par de nombreux développeurs Windows, notamment lorsqu'ils ont besoin de créer une interface basique facilement et rapidement, mais pas seulement
 
