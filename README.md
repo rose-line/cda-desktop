@@ -418,7 +418,7 @@ public class DelegateCommand : ICommand
 - Dans notre solution, ajouter un projet _Windows Forms App_ (attention, pas _.NET Framework_)
   - nom : `GestionEmploye.WinForms`
   - Target .NET 5
-- Un seul projet et créé
+- Un seul projet est créé
 - Renommer (F2) `Form1.cs` en `MainForm.cs`
 - La structure est différente de ce qu'on a vu :
   - plus de XAML
